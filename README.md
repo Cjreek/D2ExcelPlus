@@ -10,6 +10,7 @@
 - Alternating row colors for readability
 - delete/append/insert and copy rows
 - Handy shortcuts for editing:
+
     | Shortcut  | Functionality |
     | ----- | ---- |
     | Escape  | Cancel changes while editing a cell |
