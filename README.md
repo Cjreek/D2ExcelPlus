@@ -1,6 +1,8 @@
 # D2Excel Plus
 (C) 2019 Cjreek
 
+An editor to edit diablo 2 textfiles.
+
 ### Features:
 - Open a whole folder (workspace) with all your .txt files for easy access
 - Drag&Drop files into the program to load them
