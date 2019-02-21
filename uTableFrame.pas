@@ -44,11 +44,16 @@ type
       var CanSelect: Boolean);
     procedure sgTableDrawCell(Sender: TObject; ACol, ARow: Integer; Rect: TRect;
       State: TGridDrawState);
+    procedure sgTableMouseDown(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
+    procedure sgTableMouseMove(Sender: TObject; Shift: TShiftState; X,
+      Y: Integer);
     {$endregion}
   private
     FFilename: String;
     FOldValue: String;
     FModified: Boolean;
+    FSelStart: TPoint;
     FOnModifiedChanged: TNotifyEvent;
     procedure DeleteCurrentRow;
     procedure SetModified(AModified: Boolean);
@@ -506,6 +511,31 @@ begin
   begin
     sgTable.Cells[sgTable.Selection.Left, sgTable.Selection.Top] := Clipboard.AsText;
     SetModified(true);
+  end;
+end;
+
+procedure TTableFrame.sgTableMouseDown(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+var row, col: Integer;
+begin
+  sgTable.MouseToCell(X, Y, col, row);
+  FSelStart := Point(col, row);
+end;
+
+procedure TTableFrame.sgTableMouseMove(Sender: TObject; Shift: TShiftState; X,
+  Y: Integer);
+var col, row: Integer;
+    gr: TGridRect;
+begin
+  if ssLeft in Shift then
+  begin
+    sgTable.MouseToCell(X, Y, col, row);
+    gr.Left := Min(col, FSelStart.X);
+    gr.Right := Max(col, FSelStart.X);
+    gr.Top := Min(row, FSelStart.Y);
+    gr.Bottom := Max(row, FSelStart.Y);
+
+    sgTable.Selection := gr;
   end;
 end;
 

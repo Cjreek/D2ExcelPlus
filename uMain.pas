@@ -9,7 +9,7 @@ uses
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.Grids, Vcl.ExtCtrls, Vcl.ComCtrls,
   Vcl.Menus, Vcl.ExtDlgs, Generics.Collections, System.IOUtils, IniFiles, ShellAPI,
   Vcl.ToolWin, System.ImageList, Vcl.ImgList, Vcl.StdCtrls,
-  uTableFrame, uTableFrameTabsheet;
+  uTableFrame, uTableFrameTabsheet, Vcl.Buttons;
 
 type
   TExcelPlusMainForm = class(TForm)
@@ -21,20 +21,13 @@ type
     miOpen: TMenuItem;
     miExit: TMenuItem;
     odOpenDialog: TFileOpenDialog;
-    tbToolbar: TToolBar;
-    tbOpen: TToolButton;
-    tbSave: TToolButton;
-    tbSeperator2: TToolButton;
     miSave: TMenuItem;
     imlIcons32: TImageList;
-    tbSaveAll: TToolButton;
-    tbSeperator1: TToolButton;
     miSaveAll: TMenuItem;
     pmFiles: TPopupMenu;
     miCloseFile: TMenuItem;
     tvWorkspace: TTreeView;
     odFolder: TFileOpenDialog;
-    tbOpenFolder: TToolButton;
     miOpenWS: TMenuItem;
     imlIcons16: TImageList;
     miClose: TMenuItem;
@@ -48,10 +41,19 @@ type
     fdSearch: TFindDialog;
     Edit1: TMenuItem;
     miFind: TMenuItem;
-    tbSeperator3: TToolButton;
-    tbSearch: TToolButton;
     miHelp: TMenuItem;
     miAbout: TMenuItem;
+    Panel1: TPanel;
+    sbOpen: TSpeedButton;
+    sbOpenFolder: TSpeedButton;
+    sbSave: TSpeedButton;
+    sbSaveAll: TSpeedButton;
+    sbSearch: TSpeedButton;
+    Panel2: TPanel;
+    Panel3: TPanel;
+    Panel4: TPanel;
+    sbRedo: TSpeedButton;
+    sbUndo: TSpeedButton;
     {$endregion}
     {$region 'Eventhandler'}
     procedure miOpenClick(Sender: TObject);
@@ -84,6 +86,8 @@ type
     FLastFindPos: TPoint;
     FFiles: TDictionary<string, TTableFrameTabsheet>;
 
+    procedure InitToolbar;
+
     procedure SetControls(ASetFocus: Boolean = true);
 
     procedure LoadSettings;
@@ -109,7 +113,7 @@ implementation
 {$R *.dfm}
 
 uses
-  System.UITypes, System.Types, uAbout;
+  System.UITypes, System.Types, Math, uAbout;
 
 procedure TExcelPlusMainForm.CloseFile(AFilename: String);
 var tab: TTableFrameTabsheet;
@@ -145,6 +149,7 @@ begin
   inherited;
   FFiles := TDictionary<String, TTableFrameTabsheet>.Create;
   DragAcceptFiles(Handle, true);
+  InitToolbar();
 end;
 
 destructor TExcelPlusMainForm.Destroy;
@@ -212,7 +217,20 @@ end;
 
 procedure TExcelPlusMainForm.FormCreate(Sender: TObject);
 begin
-  LoadSettings;
+  InitToolbar();
+  LoadSettings();
+  SetControls();
+end;
+
+procedure TExcelPlusMainForm.InitToolbar;
+begin
+  imlIcons32.GetBitmap(0, sbOpen.Glyph);
+  imlIcons32.GetBitmap(1, sbOpenFolder.Glyph);
+  imlIcons32.GetBitmap(2, sbSave.Glyph);
+  imlIcons32.GetBitmap(3, sbSaveAll.Glyph);
+  imlIcons32.GetBitmap(4, sbSearch.Glyph);
+  imlIcons32.GetBitmap(5, sbUndo.Glyph);
+  imlIcons32.GetBitmap(6, sbRedo.Glyph);
 end;
 
 function TExcelPlusMainForm.IsAnyModified: Boolean;
@@ -474,22 +492,24 @@ begin
     Caption := ExtractFileName(currTab.Frame.Filename) + ' - D2Excel Plus';
 
     miSave.Enabled := currTab.Frame.Modified;
-    tbSave.Enabled := currTab.Frame.Modified;
+    sbSave.Enabled := currTab.Frame.Modified;
     miSaveAll.Enabled := anyModified;
-    tbSaveAll.Enabled := anyModified;
+    sbSaveAll.Enabled := anyModified;
     miClose.Enabled := true;
     miCloseAll.Enabled := true;
+    sbSearch.Enabled := true;
   end
   else
   begin
     Caption := 'D2Excel Plus';
 
+    sbSearch.Enabled := false;
     miClose.Enabled := false;
     miCloseAll.Enabled := false;
     miSave.Enabled := false;
-    tbSave.Enabled := false;
+    sbSave.Enabled := false;
     miSaveAll.Enabled := false;
-    tbSaveAll.Enabled := false;
+    sbSaveAll.Enabled := false;
   end;
 end;
 

@@ -18,13 +18,15 @@ object TableFrame: TTableFrame
     RowCount = 3
     GradientEndColor = 15790320
     GradientStartColor = 15790320
-    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goDrawFocusSelected, goColSizing, goEditing, goThumbTracking]
+    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goDrawFocusSelected, goColSizing, goEditing, goThumbTracking, goFixedColClick]
     PopupMenu = pmGrid
     TabOrder = 0
     OnContextPopup = sgTableContextPopup
     OnDrawCell = sgTableDrawCell
     OnGetEditText = sgTableGetEditText
     OnKeyDown = sgTableKeyDown
+    OnMouseDown = sgTableMouseDown
+    OnMouseMove = sgTableMouseMove
     OnMouseWheelDown = sgTableMouseWheelDown
     OnMouseWheelUp = sgTableMouseWheelUp
     OnSelectCell = sgTableSelectCell
