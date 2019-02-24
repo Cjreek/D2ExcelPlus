@@ -87,7 +87,7 @@ object ExcelPlusMainForm: TExcelPlusMainForm
       Align = alLeft
       Flat = True
       NumGlyphs = 2
-      OnClick = miFindClick
+      OnClick = miRedoClick
       ExplicitLeft = 396
       ExplicitTop = 5
     end
@@ -153,7 +153,7 @@ object ExcelPlusMainForm: TExcelPlusMainForm
       Align = alLeft
       Flat = True
       NumGlyphs = 2
-      OnClick = miFindClick
+      OnClick = miUndoClick
       ExplicitLeft = 310
       ExplicitTop = 5
     end
@@ -238,6 +238,19 @@ object ExcelPlusMainForm: TExcelPlusMainForm
     end
     object Edit1: TMenuItem
       Caption = 'Edit'
+      object miUndo: TMenuItem
+        Caption = 'Undo'
+        ShortCut = 16474
+        OnClick = miUndoClick
+      end
+      object miRedo: TMenuItem
+        Caption = 'Redo'
+        ShortCut = 16473
+        OnClick = miRedoClick
+      end
+      object N4: TMenuItem
+        Caption = '-'
+      end
       object miFind: TMenuItem
         Caption = 'Find'
         ShortCut = 16454

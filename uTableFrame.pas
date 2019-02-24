@@ -5,9 +5,20 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.Grids, Vcl.ComCtrls,
-  Vcl.ExtCtrls, Vcl.StdCtrls, Vcl.Samples.Spin, Vcl.Menus, Clipbrd;
+  Vcl.ExtCtrls, Vcl.StdCtrls, Vcl.Samples.Spin, Vcl.Menus, Clipbrd, Generics.Collections;
 
 type
+  TEditorState = class
+  strict private
+    FArea: TGridREct;
+    FValues: TStrings;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    property Area: TGridREct read FArea write FArea;
+    property Values: TStrings read FValues;
+  end;
+
   TTableFrame = class(TFrame)
     {$region 'Components'}
     sgTable: TStringGrid;
@@ -48,6 +59,7 @@ type
       Shift: TShiftState; X, Y: Integer);
     procedure sgTableMouseMove(Sender: TObject; Shift: TShiftState; X,
       Y: Integer);
+    procedure sgTableFixedCellClick(Sender: TObject; ACol, ARow: Integer);
     {$endregion}
   private
     FFilename: String;
@@ -55,19 +67,36 @@ type
     FModified: Boolean;
     FSelStart: TPoint;
     FOnModifiedChanged: TNotifyEvent;
+    FUndoStack: TStack<TEditorState>;
+    FRedoStack: TStack<TEditorState>;
     procedure DeleteCurrentRow;
     procedure SetModified(AModified: Boolean);
     function GetTabsheet: TTabsheet;
+    function GetCanUndo: Boolean;
+    function GetCanRedo: Boolean;
+
+    procedure ClearStack(AStack: TStack<TEditorState>);
+    function CreateEditorState(AArea: TGridRect): TEditorState;
+    procedure ProcessEditorState(AFromStack: TStack<TEditorState>; AToStack: TStack<TEditorState>);
   public
     constructor Create(AOwner: TComponent; AFilename: String); reintroduce;
+    destructor Destroy; override;
+
     procedure LoadFile(const AFilename: String);
     procedure SaveFile();
 
     function Find(AText: String; AStartPos: TPoint; AOptions: TFindOptions; out ResultPosition: TPoint): Boolean;
     procedure Select(ACol, ARow: Integer; AScrollTo: Boolean = false);
 
+    procedure CreateUndo(); overload;
+    procedure CreateUndo(AArea: TGridRect); overload;
+    procedure Undo();
+    procedure Redo();
+
     property Filename: String read FFilename;
     property Modified: Boolean read FModified;
+    property CanUndo: Boolean read GetCanUndo;
+    property CanRedo: Boolean read GetCanRedo;
     property Tabsheet: TTabsheet read GetTabsheet;
 
     property OnModifiedChanged: TNotifyEvent read FOnModifiedChanged write FOnModifiedChanged;
@@ -80,6 +109,9 @@ implementation
 uses
   Math, StrUtils, System.Types, System.IOUtils;
 
+const
+  clAlternatingRow = $00FAFAFA;
+
 { TTableFrame }
 
 procedure TTableFrame.cbFixColumnsClick(Sender: TObject);
@@ -91,11 +123,54 @@ begin
     sgTable.FixedCols := 1;
 end;
 
+procedure TTableFrame.ClearStack(AStack: TStack<TEditorState>);
+var state: TEditorState;
+begin
+  while AStack.Count > 0 do
+  begin
+    state := AStack.Pop;
+    state.Free;
+  end;
+end;
+
 constructor TTableFrame.Create(AOwner: TComponent; AFilename: String);
 begin
   inherited Create(AOwner);
+  FUndoStack := TStack<TEditorState>.Create();
+  FRedoStack := TStack<TEditorState>.Create();
   Name := TPath.GetFileNameWithoutExtension(AFilename);
   LoadFile(AFilename);
+end;
+
+function TTableFrame.CreateEditorState(AArea: TGridRect): TEditorState;
+var x,y: Integer;
+    line: String;
+begin
+  Result := TEditorState.Create;
+  Result.Area := AArea;
+  for y := Result.Area.Top to Result.Area.Bottom do
+  begin
+    line := '';
+    for x := Result.Area.Left to Result.Area.Right do
+      line := line + sgTable.Cells[x, y] + #9;
+    Result.Values.Add(line)
+  end;
+end;
+
+procedure TTableFrame.CreateUndo(AArea: TGridRect);
+var state: TEditorState;
+begin
+  ClearStack(FRedoStack);
+
+  state := CreateEditorState(AArea);
+  FUndoStack.Push(state);
+  if Assigned(FOnModifiedChanged) then
+    FOnModifiedChanged(Tabsheet);
+end;
+
+procedure TTableFrame.CreateUndo;
+begin
+  CreateUndo(sgTable.Selection);
 end;
 
 procedure TTableFrame.DeleteCurrentRow;
@@ -111,6 +186,13 @@ begin
   sgTable.RowCount := sgTable.RowCount - 1;
 
   SetModified(true);
+end;
+
+destructor TTableFrame.Destroy;
+begin
+  FreeAndNil(FUndoStack);
+  FreeAndNil(FRedoStack);
+  inherited;
 end;
 
 function TTableFrame.Find(AText: String; AStartPos: TPoint; AOptions: TFindOptions; out ResultPosition: TPoint): Boolean;
@@ -237,6 +319,16 @@ begin
   end;
 end;
 
+function TTableFrame.GetCanRedo: Boolean;
+begin
+  Result := FRedoStack.Count > 0;
+end;
+
+function TTableFrame.GetCanUndo: Boolean;
+begin
+  Result := FUndoStack.Count > 0;
+end;
+
 function TTableFrame.GetTabsheet: TTabsheet;
 begin
   Result := TTabsheet(Parent);
@@ -342,6 +434,48 @@ begin
   SetModified(true);
 end;
 
+procedure TTableFrame.ProcessEditorState(AFromStack,
+  AToStack: TStack<TEditorState>);
+var state, newState: TEditorState;
+    x,y: Integer;
+    lineValues: TStringList;
+begin
+  if AFromStack.Count > 0 then
+  begin
+    state := AFromStack.Pop;
+    try
+      newState := CreateEditorState(state.Area);
+      try
+        lineValues := TStringList.Create;
+        try
+          lineValues.StrictDelimiter := true;
+          lineValues.Delimiter := #9;
+          for y := state.Area.Top to state.Area.Bottom do
+          begin
+            lineValues.DelimitedText := state.Values[y-state.Area.Top];
+            for x := state.Area.Left to state.Area.Right do
+              sgTable.Cells[x,y] := lineValues[x-state.Area.Left];
+          end;
+        finally
+          lineValues.Free;
+        end;
+      finally
+        AToStack.Push(newState);
+      end;
+    finally
+      state.Free;
+    end;
+
+    if Assigned(FOnModifiedChanged) then
+      FOnModifiedChanged(Tabsheet);
+  end;
+end;
+
+procedure TTableFrame.Redo;
+begin
+  ProcessEditorState(FRedoStack, FUndoStack);
+end;
+
 procedure TTableFrame.SaveFile;
 var tabFile: TStringList;
     line: String;
@@ -354,7 +488,8 @@ begin
       line := '';
       for x := 1 to sgTable.ColCount-1 do
         line := line + sgTable.Cells[x,y] + #9;
-      tabFile.Add(Trim(line));
+      SetLength(line, Length(line)-1);
+      tabFile.Add(line);
     end;
 
     tabFile.SaveToFile(FFilename, TEncoding.ANSI);
@@ -434,53 +569,162 @@ end;
 procedure TTableFrame.sgTableDrawCell(Sender: TObject; ACol, ARow: Integer;
   Rect: TRect; State: TGridDrawState);
 begin
-  if (not (gdFixed in State)) and (not (gdSelected in State)) and (ARow mod 2 = 0) then
+  InflateRect(Rect, 1, 1);
+
+  if gdFixed in State then
+    sgTable.Canvas.Brush.Color := clBtnFace
+  else
+  if (ARow mod 2 = 0) then
   begin
-    Rect.Left := Rect.Left - 4;
+    sgTable.Canvas.Brush.Color := clAlternatingRow;
+    if (gdSelected in State) or (gdFocused in State) or (gdPressed in State) or (gdHotTrack in State) then
+      sgTable.Canvas.Brush.Color := RGB(234, 239, 250);
+  end
+  else
+  begin
+    sgTable.Canvas.Brush.Color := clWindow;
+    if (gdSelected in State) or (gdFocused in State) or (gdPressed in State) or (gdHotTrack in State) then
+      sgTable.Canvas.Brush.Color := RGB(239, 243, 255);
+  end;
 
-    sgTable.Canvas.Brush.Color := RGB(250,250,250);
-    sgTable.Canvas.Font.Color := clWindowText;
+  sgTable.Canvas.Font.Color := clWindowText;
+  sgTable.Canvas.TextRect(Rect, Rect.Left + 6, Rect.Top + 2, sgTable.Cells[ACol, ARow]);
 
-    sgTable.Canvas.FillRect(Rect);
-    sgTable.Canvas.TextRect(Rect, Rect.Left + 6, Rect.Top + 2, sgTable.Cells[ACol, ARow]);
+  sgTable.Canvas.Pen.Color := clSilver;
+  sgTable.Canvas.Brush.Style := bsClear;
+  sgTable.Canvas.Rectangle(Rect);
+
+  InflateRect(Rect, -1, -1);
+
+  if (ACol >= sgTable.Selection.Left) and (ACol <= sgTable.Selection.Right) and (ARow >= sgTable.Selection.Top) and (ARow <= sgTable.Selection.Bottom) then
+  begin
+    sgTable.Canvas.Pen.Color := RGB(0,128,192);
+    if (ACol = sgTable.Selection.Left) then
+    begin
+      sgTable.Canvas.MoveTo(Rect.Left, Rect.Top);
+      sgTable.Canvas.LineTo(Rect.Left, Rect.Bottom);
+    end;
+
+    if (ACol = sgTable.Selection.Right) then
+    begin
+      sgTable.Canvas.MoveTo(Rect.Right-1, Rect.Top);
+      sgTable.Canvas.LineTo(Rect.Right-1, Rect.Bottom);
+    end;
+
+    if (ARow = sgTable.Selection.Top) then
+    begin
+      sgTable.Canvas.MoveTo(Rect.Left, Rect.Top);
+      sgTable.Canvas.LineTo(Rect.Right, Rect.Top);
+    end;
+
+    if (ARow = sgTable.Selection.Bottom) then
+    begin
+      sgTable.Canvas.MoveTo(Rect.Left, Rect.Bottom-1);
+      sgTable.Canvas.LineTo(Rect.Right, Rect.Bottom-1);
+    end;
+  end;
+end;
+
+procedure TTableFrame.sgTableFixedCellClick(Sender: TObject; ACol,
+  ARow: Integer);
+var gr: TGridRect;
+begin
+  if (ARow > 0) then
+  begin
+    gr.Left := sgTable.FixedCols;
+    gr.Right := sgTable.ColCount-1;
+    if GetAsyncKeyState(VK_SHIFT) < 0 then
+    begin
+      gr.Top := Min(ARow, sgTable.Selection.Top);
+      gr.Bottom := Max(ARow, sgTable.Selection.Bottom);
+    end
+    else
+    begin
+      gr.Top := ARow;
+      gr.Bottom := ARow;
+    end;
+    sgTable.Selection := gr;
+  end
+  else if (ACol >= sgTable.FixedCols) then
+  begin
+    if GetAsyncKeyState(VK_SHIFT) < 0 then
+    begin
+      gr.Left := Min(ACol, sgTable.Selection.Left);
+      gr.Right := Max(ACol, sgTable.Selection.Right);
+    end
+    else
+    begin
+      gr.Left := ACol;
+      gr.Right := ACol;
+    end;
+    gr.Top := sgTable.FixedRows;
+    gr.Bottom := sgTable.RowCount-1;
+    sgTable.Selection := gr;
   end;
 end;
 
 procedure TTableFrame.sgTableGetEditText(Sender: TObject; ACol, ARow: Integer;
   var Value: string);
 begin
-  FOldValue := Value;
+  if Value <> FOldValue then
+    FOldValue := Value;
+  CreateUndo();
 end;
 
 procedure TTableFrame.sgTableKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 var num: Integer;
-    value: String;
+    value, line: String;
+    sl: TStringList;
+    rowValues: TArray<String>;
+    x,y: Integer;
+    gr: TGridRect;
 begin
+  if Key = VK_CONTROL then
+    Key := 0
+  else
   if (Key = VK_DELETE) and (ssCtrl in Shift) then
     DeleteCurrentRow
   else
   if (Key = VK_DELETE) and (Shift = []) and (sgTable.Cells[sgTable.Selection.Left, sgTable.Selection.Top] <> '') then
   begin
-    sgTable.Cells[sgTable.Selection.Left, sgTable.Selection.Top] := '';
+    CreateUndo();
+    for y := sgTable.Selection.Top to sgTable.Selection.Bottom do
+    begin
+      for x := sgTable.Selection.Left to sgTable.Selection.Right do
+        sgTable.Cells[x, y] := '';
+    end;
     SetModified(true);
   end
   else
   if ((Key = VK_OEM_PLUS) or (Key = VK_ADD)) and (ssCtrl in Shift) then
   begin
-    if TryStrToInt(sgTable.Cells[sgTable.Selection.Left, sgTable.Selection.Top], num) then
+    CreateUndo();
+    for y := sgTable.Selection.Top to sgTable.Selection.Bottom do
     begin
-      sgTable.Cells[sgTable.Selection.Left, sgTable.Selection.Top] := IntToStr(num+1);
-      SetModified(true);
+      for x := sgTable.Selection.Left to sgTable.Selection.Right do
+      begin
+        if TryStrToInt(sgTable.Cells[x, y], num) then
+        begin
+          sgTable.Cells[x, y] := IntToStr(num+1);
+          SetModified(true);
+        end;
+      end;
     end;
   end
   else
   if ((Key = VK_OEM_MINUS) or (Key = VK_SUBTRACT)) and (ssCtrl in Shift) then
   begin
-    if TryStrToInt(sgTable.Cells[sgTable.Selection.Left, sgTable.Selection.Top], num) then
+    for y := sgTable.Selection.Top to sgTable.Selection.Bottom do
     begin
-      sgTable.Cells[sgTable.Selection.Left, sgTable.Selection.Top] := IntToStr(num-1);
-      SetModified(true);
+      for x := sgTable.Selection.Left to sgTable.Selection.Right do
+      begin
+        if TryStrToInt(sgTable.Cells[x, y], num) then
+        begin
+          sgTable.Cells[x, y] := IntToStr(num-1);
+          SetModified(true);
+        end;
+      end;
     end;
   end
   else
@@ -498,19 +742,75 @@ begin
   end
   else
   if (Key = Word(VkKeyScan('c'))) and (ssCtrl in Shift) then
-    Clipboard.AsText := sgTable.Cells[sgTable.Selection.Left, sgTable.Selection.Top]
+  begin
+    sl := TStringList.Create;
+    try
+      for y := sgTable.Selection.Top to sgTable.Selection.Bottom do
+      begin
+        line := '';
+        for x := sgTable.Selection.Left to sgTable.Selection.Right do
+          line := line + sgTable.Cells[x, y] + #9;
+        sl.Add(line)
+      end;
+      Clipboard.AsText := sl.Text;
+    finally
+      sl.Free;
+    end;
+  end
   else
   if (Key = Word(VkKeyScan('x'))) and (ssCtrl in Shift) then
   begin
-    Clipboard.AsText := sgTable.Cells[sgTable.Selection.Left, sgTable.Selection.Top];
-    sgTable.Cells[sgTable.Selection.Left, sgTable.Selection.Top] := '';
+    CreateUndo;
+
+    sl := TStringList.Create;
+    try
+      for y := sgTable.Selection.Top to sgTable.Selection.Bottom do
+      begin
+        line := '';
+        for x := sgTable.Selection.Left to sgTable.Selection.Right do
+        begin
+          line := line + sgTable.Cells[x, y] + #9;
+          sgTable.Cells[x, y] := '';
+        end;
+        sl.Add(line)
+      end;
+      Clipboard.AsText := sl.Text;
+    finally
+      sl.Free;
+    end;
+
     SetModified(true);
   end
   else
   if (Key = Word(VkKeyScan('v'))) and (ssCtrl in Shift) then
   begin
-    sgTable.Cells[sgTable.Selection.Left, sgTable.Selection.Top] := Clipboard.AsText;
-    SetModified(true);
+    if Clipboard.HasFormat(CF_TEXT) then
+    begin
+      sl := TStringList.Create;
+      try
+        sl.Text := Clipboard.AsText;
+        rowValues := sl[0].Split([#9]);
+
+        gr.Left := sgTable.Selection.Left;
+        gr.Top := sgTable.Selection.Top;
+        gr.Right := gr.Left + Length(rowValues) - 1;
+        gr.Bottom := gr.Top + sl.Count - 1;
+        CreateUndo(gr);
+
+        for y := sgTable.Selection.Top to Min(sgTable.Selection.Top + sl.Count-1, sgTable.RowCount-1)  do
+        begin
+          line := sl[y-sgTable.Selection.Top];
+          rowValues := line.Split([#9]);
+          for x := sgTable.Selection.Left to Min(sgTable.Selection.Left + High(rowValues), sgTable.ColCount-1) do
+            sgTable.Cells[x, y] := rowValues[x-sgTable.Selection.Left];
+          sl.Add(line)
+        end;
+      finally
+        sl.Free;
+      end;
+
+      SetModified(true);
+    end;
   end;
 end;
 
@@ -526,16 +826,43 @@ procedure TTableFrame.sgTableMouseMove(Sender: TObject; Shift: TShiftState; X,
   Y: Integer);
 var col, row: Integer;
     gr: TGridRect;
+    maxRow, maxCol: Boolean;
 begin
-  if ssLeft in Shift then
+  if (ssLeft in Shift) and (not sgTable.EditorMode) then
   begin
-    sgTable.MouseToCell(X, Y, col, row);
-    gr.Left := Min(col, FSelStart.X);
-    gr.Right := Max(col, FSelStart.X);
-    gr.Top := Min(row, FSelStart.Y);
-    gr.Bottom := Max(row, FSelStart.Y);
+    maxRow := sgTable.Selection.Bottom = sgTable.RowCount-1;
+    maxCol := sgTable.Selection.Right = sgTable.ColCount-1;
 
-    sgTable.Selection := gr;
+    sgTable.MouseToCell(X, Y, col, row);
+    if (col = -1) and (row = -1) then
+    begin
+      if maxRow then
+      begin
+        repeat
+          dec(Y);
+          sgTable.MouseToCell(X, Y, col, row);
+        until ((col <> -1) and (row <> -1)) or (Y < 0);
+      end;
+
+      if maxCol then
+      begin
+        repeat
+          dec(X);
+          sgTable.MouseToCell(X, Y, col, row);
+        until ((col <> -1) and (row <> -1)) or (X < 0);
+      end;
+    end;
+
+    if (X >= 0) and (Y >= 0) then
+    begin
+      gr.Left := Min(col, FSelStart.X);
+      gr.Right := Max(col, FSelStart.X);
+      gr.Top := Min(row, FSelStart.Y);
+      gr.Bottom := Max(row, FSelStart.Y);
+
+      sgTable.Selection := gr;
+      sgTable.Repaint;
+    end;
   end;
 end;
 
@@ -571,13 +898,44 @@ end;
 procedure TTableFrame.sgTableSelectCell(Sender: TObject; ACol, ARow: Integer;
   var CanSelect: Boolean);
 var value: String;
+    newSelection: TGridRect;
 begin
   if sgTable.EditorMode then
   begin
-    value := sgTable.Cells[sgTable.Selection.Left, sgTable.Selection.Top];
+    value := sgTable.Cells[sgTable.Selection.Right, sgTable.Selection.Bottom];
     if Value <> FOldValue then
-      SetModified(true);
+      SetModified(true)
+    else
+      FUndoStack.Pop.Free;
+  end
+  else if GetAsyncKeyState(VK_SHIFT) < 0 then
+  begin
+    newSelection.Left := sgTable.Selection.Left;
+    newSelection.Top := sgTable.Selection.Top;
+    newSelection.Right := ACol;
+    newSelection.Bottom := ARow;
+    sgTable.Selection := newSelection;
+    sgTable.Repaint;
+    CanSelect := false;
   end;
+end;
+
+procedure TTableFrame.Undo;
+begin
+  ProcessEditorState(FUndoStack, FRedoStack);
+end;
+
+{ TEditorState }
+
+constructor TEditorState.Create;
+begin
+  FValues := TStringList.Create;
+end;
+
+destructor TEditorState.Destroy;
+begin
+  FreeAndNil(FValues);
+  inherited;
 end;
 
 end.

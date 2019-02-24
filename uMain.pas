@@ -54,6 +54,9 @@ type
     Panel4: TPanel;
     sbRedo: TSpeedButton;
     sbUndo: TSpeedButton;
+    miUndo: TMenuItem;
+    miRedo: TMenuItem;
+    N4: TMenuItem;
     {$endregion}
     {$region 'Eventhandler'}
     procedure miOpenClick(Sender: TObject);
@@ -80,6 +83,8 @@ type
     procedure miFindClick(Sender: TObject);
     procedure fdSearchFind(Sender: TObject);
     procedure miAboutClick(Sender: TObject);
+    procedure miUndoClick(Sender: TObject);
+    procedure miRedoClick(Sender: TObject);
     {$endregion}
   private
     FWorkspacePath: String;
@@ -337,6 +342,14 @@ begin
     LoadWorkspace(odFolder.FileName);
 end;
 
+procedure TExcelPlusMainForm.miRedoClick(Sender: TObject);
+var currTab: TTableFrameTabsheet;
+begin
+  currTab := TTableFrameTabsheet(pcFiles.ActivePage);
+  if Assigned(currTab) then
+    currTab.Frame.Redo;
+end;
+
 procedure TExcelPlusMainForm.miSaveAllClick(Sender: TObject);
 var i: Integer;
     tab: TTableFrameTabsheet;
@@ -358,6 +371,14 @@ begin
     tab := TTableFrameTabsheet(pcFiles.ActivePage);
     tab.Frame.SaveFile();
   end;
+end;
+
+procedure TExcelPlusMainForm.miUndoClick(Sender: TObject);
+var currTab: TTableFrameTabsheet;
+begin
+  currTab := TTableFrameTabsheet(pcFiles.ActivePage);
+  if Assigned(currTab) then
+    currTab.Frame.Undo;
 end;
 
 procedure TExcelPlusMainForm.OpenFile(AFilename: String);
@@ -491,6 +512,8 @@ begin
 
     Caption := ExtractFileName(currTab.Frame.Filename) + ' - D2Excel Plus';
 
+    sbUndo.Enabled := currTab.Frame.CanUndo;
+    sbRedo.Enabled := currTab.Frame.CanRedo;
     miSave.Enabled := currTab.Frame.Modified;
     sbSave.Enabled := currTab.Frame.Modified;
     miSaveAll.Enabled := anyModified;
@@ -503,6 +526,8 @@ begin
   begin
     Caption := 'D2Excel Plus';
 
+    sbUndo.Enabled := false;
+    sbRedo.Enabled := false;
     sbSearch.Enabled := false;
     miClose.Enabled := false;
     miCloseAll.Enabled := false;
