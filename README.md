@@ -1,7 +1,7 @@
-# D2Excel Plus 0.91
+# D2Excel Plus 0.92
 (C) 2019 Cjreek
 
-An editor to edit diablo 2 textfiles.
+An editor to edit Diablo 2 (LoD + Resurrected) textfiles.
 
 ### Features:
 - Open a whole folder (workspace) with all your .txt files for easy access
@@ -40,6 +40,10 @@ C:\Users\<Username>\AppData\Roaming
 ```
 	
 ### Changes
+##### 0.92
+* [FIX] Fixed overwriting too many cells when pasting (i.e. 2 cells where copied, 3 where pasted)
+* [FIX] Fixed not being able to open multiple files with the same file name
+* [FIX] Locking/unlocking columns now preserves the selection and cursor position instead of jumping to the top left
 ##### 0.91
 * [FEATURE] Added undo/redo functionality
 * [FEATURE] Added multiselect of cells supporting copy&paste and other operations on cells
