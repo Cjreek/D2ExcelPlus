@@ -20,14 +20,14 @@ object AboutDlg: TAboutDlg
     Top = 9
     Width = 91
     Height = 13
-    Caption = 'D2Excel Plus v0.91'
+    Caption = 'D2Excel Plus v0.92'
   end
   object lAboutLine2: TLabel
     Left = 112
     Top = 24
-    Width = 105
+    Width = 121
     Height = 13
-    Caption = 'Windows Vista/7/8/10'
+    Caption = 'Windows Vista/7/8/10/11'
   end
   object lAboutLine3: TLabel
     Left = 112

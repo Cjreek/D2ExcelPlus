@@ -198,7 +198,7 @@ object ExcelPlusMainForm: TExcelPlusMainForm
         OnClick = miOpenClick
       end
       object miOpenWS: TMenuItem
-        Caption = 'Open Workspace'
+        Caption = 'Open Folder'
         ImageIndex = 3
         OnClick = miOpenWSClick
       end

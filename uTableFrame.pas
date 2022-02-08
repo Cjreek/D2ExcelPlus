@@ -107,7 +107,7 @@ implementation
 {$R *.dfm}
 
 uses
-  Math, StrUtils, System.Types, System.IOUtils;
+  Math, StrUtils, System.Types, System.IOUtils, System.Hash;
 
 const
   clAlternatingRow = $00FAFAFA;
@@ -115,12 +115,27 @@ const
 { TTableFrame }
 
 procedure TTableFrame.cbFixColumnsClick(Sender: TObject);
+var selection: TGridRect;
+    cursorX, cursorY: Integer;
 begin
   seFixedColumns.Enabled := cbFixColumns.Checked;
-  if cbFixColumns.Checked then
-    sgTable.FixedCols := seFixedColumns.Value + 1
-  else
-    sgTable.FixedCols := 1;
+  try
+    selection := sgTable.Selection;
+    cursorX := sgTable.LeftCol;
+    cursorY := sgTable.TopRow;
+    try
+      if cbFixColumns.Checked then
+        sgTable.FixedCols := seFixedColumns.Value + 1
+      else
+        sgTable.FixedCols := 1;
+    finally
+      sgTable.Selection := selection;
+      sgTable.LeftCol := cursorX;
+      sgTable.TopRow := cursorY;
+    end;
+  finally
+
+  end;
 end;
 
 procedure TTableFrame.ClearStack(AStack: TStack<TEditorState>);
@@ -138,7 +153,7 @@ begin
   inherited Create(AOwner);
   FUndoStack := TStack<TEditorState>.Create();
   FRedoStack := TStack<TEditorState>.Create();
-  Name := TPath.GetFileNameWithoutExtension(AFilename);
+  Name := 'TableFrame' + THashSHA2.GetHashString(AFilename);
   LoadFile(AFilename);
 end;
 
@@ -752,7 +767,7 @@ begin
           line := line + sgTable.Cells[x, y] + #9;
         sl.Add(line)
       end;
-      Clipboard.AsText := sl.Text;
+      Clipboard.AsText := sl.Text.Trim([#13, #10, #9]);
     finally
       sl.Free;
     end;
@@ -774,7 +789,7 @@ begin
         end;
         sl.Add(line)
       end;
-      Clipboard.AsText := sl.Text;
+      Clipboard.AsText := sl.Text.Trim([#13, #10, #9]);
     finally
       sl.Free;
     end;
