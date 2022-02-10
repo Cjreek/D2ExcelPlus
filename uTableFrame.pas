@@ -116,25 +116,31 @@ const
 
 procedure TTableFrame.cbFixColumnsClick(Sender: TObject);
 var selection: TGridRect;
-    cursorX, cursorY: Integer;
+    leftCol, topRow: Integer;
 begin
   seFixedColumns.Enabled := cbFixColumns.Checked;
+
+  selection := sgTable.Selection;
+  leftCol := sgTable.LeftCol;
+  topRow := sgTable.TopRow;
   try
-    selection := sgTable.Selection;
-    cursorX := sgTable.LeftCol;
-    cursorY := sgTable.TopRow;
-    try
-      if cbFixColumns.Checked then
-        sgTable.FixedCols := seFixedColumns.Value + 1
-      else
-        sgTable.FixedCols := 1;
-    finally
-      sgTable.Selection := selection;
-      sgTable.LeftCol := cursorX;
-      sgTable.TopRow := cursorY;
+    if cbFixColumns.Checked then
+    begin
+      sgTable.FixedCols := seFixedColumns.Value + 1
+    end
+    else
+    begin
+      if leftCol = sgTable.FixedCols then
+        leftCol := 1;
+      sgTable.FixedCols := 1;
     end;
   finally
+    selection.Left := Max(selection.Left, sgTable.FixedCols);
+    selection.Right := Max(selection.Right, sgTable.FixedCols);
+    sgTable.Selection := selection;
 
+    sgTable.LeftCol := Max(leftCol, sgTable.FixedCols);
+    sgTable.TopRow := topRow;
   end;
 end;
 
