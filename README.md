@@ -3,6 +3,8 @@
 
 An editor to edit Diablo 2 (LoD + Resurrected) textfiles.
 
+[Download Latest Version](https://github.com/Cjreek/D2ExcelPlus/releases/tag/D2EP092)
+
 ### Features:
 - Open a whole folder (workspace) with all your .txt files for easy access
 - Drag&Drop files into the program to load them
