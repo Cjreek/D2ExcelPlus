@@ -771,7 +771,7 @@ begin
         line := '';
         for x := sgTable.Selection.Left to sgTable.Selection.Right do
           line := line + sgTable.Cells[x, y] + #9;
-        sl.Add(line)
+        sl.Add(line.Trim([#9]))
       end;
       Clipboard.AsText := sl.Text.Trim([#13, #10, #9]);
     finally
@@ -793,7 +793,7 @@ begin
           line := line + sgTable.Cells[x, y] + #9;
           sgTable.Cells[x, y] := '';
         end;
-        sl.Add(line)
+        sl.Add(line.Trim([#9]));
       end;
       Clipboard.AsText := sl.Text.Trim([#13, #10, #9]);
     finally
@@ -812,19 +812,35 @@ begin
         sl.Text := Clipboard.AsText;
         rowValues := sl[0].Split([#9]);
 
-        gr.Left := sgTable.Selection.Left;
-        gr.Top := sgTable.Selection.Top;
-        gr.Right := gr.Left + Length(rowValues) - 1;
-        gr.Bottom := gr.Top + sl.Count - 1;
-        CreateUndo(gr);
-
-        for y := sgTable.Selection.Top to Min(sgTable.Selection.Top + sl.Count-1, sgTable.RowCount-1)  do
+        if (((sgTable.Selection.Right - sgTable.Selection.Left)+1) mod Length(rowValues) = 0) and ((((sgTable.Selection.Bottom - sgTable.Selection.Top)+1) mod sl.Count) = 0) then
         begin
-          line := sl[y-sgTable.Selection.Top];
-          rowValues := line.Split([#9]);
-          for x := sgTable.Selection.Left to Min(sgTable.Selection.Left + High(rowValues), sgTable.ColCount-1) do
-            sgTable.Cells[x, y] := rowValues[x-sgTable.Selection.Left];
-          sl.Add(line)
+          CreateUndo(sgTable.Selection);
+          for y := sgTable.Selection.Top to sgTable.Selection.Bottom do
+          begin
+            line := sl[(y-sgTable.Selection.Top) mod sl.Count];
+            rowValues := line.Split([#9]);
+            for x := sgTable.Selection.Left to sgTable.Selection.Right do
+            begin
+              sgTable.Cells[x, y] := rowValues[(x-sgTable.Selection.Left) mod Length(rowValues)];
+            end;
+          end;
+        end
+        else
+        begin
+          gr.Left := sgTable.Selection.Left;
+          gr.Top := sgTable.Selection.Top;
+          gr.Right := gr.Left + Length(rowValues) - 1;
+          gr.Bottom := gr.Top + sl.Count - 1;
+          CreateUndo(gr);
+
+          for y := sgTable.Selection.Top to Min(sgTable.Selection.Top + sl.Count-1, sgTable.RowCount-1)  do
+          begin
+            line := sl[y-sgTable.Selection.Top];
+            rowValues := line.Split([#9]);
+            for x := sgTable.Selection.Left to Min(sgTable.Selection.Left + High(rowValues), sgTable.ColCount-1) do
+              sgTable.Cells[x, y] := rowValues[x-sgTable.Selection.Left];
+            sl.Add(line)
+          end;
         end;
       finally
         sl.Free;
